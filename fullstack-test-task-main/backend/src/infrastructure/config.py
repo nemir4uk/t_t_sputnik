@@ -33,6 +33,11 @@ class Setting(BaseSettings):
 
     storage_dir: Path = (Path(__file__).resolve().parent.parent.parent / "storage" / "files").resolve()
 
+    s3_endpoint: str = getenv('S3_ENDPOINT')
+    s3_bucket: str = getenv('S3_BUCKET')
+    s3_access_key: str = getenv('S3_ACCESS_KEY')
+    s3_secret_key: str = getenv('S3_SECRET_KEY')
+
 
 settings = Setting()
 

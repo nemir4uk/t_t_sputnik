@@ -2,6 +2,7 @@ import logging
 import math
 from pathlib import Path
 from src.infrastructure.config import settings
+from src.infrastructure.file_storage.minio import minio_client
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -63,13 +64,46 @@ def scan_file_for_threats(file_item, retry_count):
 def extract_file_metadata(file_item, retry_count):
     logger.debug('Start extract_file_metadata')
     ttl = math.exp(retry_count + 1)
-    stored_path = (
-        settings.storage_dir /
-        file_item.stored_name
-    )
-    logger.debug(f"stored_path: {stored_path}")
+    response = None
+    try:
+        response = minio_client.get_object(
+            settings.s3_bucket,
+            file_item.stored_name,
+        )
+        raw = response.read()
+        metadata = {
+            "extension": Path(
+                file_item.original_name
+            ).suffix.lower(),
+            "size_bytes": file_item.size,
+            "mime_type": file_item.mime_type,
+        }
 
-    if not stored_path.exists():
+        if file_item.mime_type.startswith("text/"):
+            content = raw.decode(
+                "utf-8",
+                errors="ignore"
+            )
+            metadata["line_count"] = len(
+                content.splitlines()
+            )
+            metadata["char_count"] = len(content)
+
+        elif file_item.mime_type == "application/pdf":
+            metadata["approx_page_count"] = max(
+                raw.count(b"/Type /Page"),
+                1
+            )
+
+        file_item.metadata_json = metadata
+        file_item.processing_status = "processed"
+        logger.debug('End extract_file_metadata with status PROCESSED')
+        return file_item, ttl
+
+    except Exception as e:
+        logger.error(
+            f"MinIO object read failed: {e}"
+        )
         file_item.processing_status = "failed"
         file_item.scan_details = (
             "stored file not found "
@@ -77,43 +111,10 @@ def extract_file_metadata(file_item, retry_count):
         )
         logger.debug('End extract_file_metadata with status FAILED')
         return file_item, ttl
-
-    metadata = {
-        "extension": Path(
-            file_item.original_name
-        ).suffix.lower(),
-        "size_bytes": file_item.size,
-        "mime_type": file_item.mime_type,
-    }
-
-    if file_item.mime_type.startswith("text/"):
-        with open(
-            stored_path,
-            "r",
-            encoding="utf-8",
-            errors="ignore"
-        ) as f:
-            content = f.read()
-        metadata["line_count"] = len(
-            content.splitlines()
-        )
-        metadata["char_count"] = len(content)
-
-    elif file_item.mime_type == "application/pdf":
-        with open(
-            stored_path,
-            "rb"
-        ) as f:
-            raw = f.read()
-
-        metadata["approx_page_count"] = max(
-            raw.count(b"/Type /Page"),
-            1
-        )
-    file_item.metadata_json = metadata
-    file_item.processing_status = "processed"
-    logger.debug('End extract_file_metadata with status PROCESSED')
-    return file_item, ttl
-
-
-
+    finally:
+        if response is not None:
+            try:
+                response.close()
+                response.release_conn()
+            except Exception as e:
+                logger.debug(f'extract_file_metadata exception {e}')

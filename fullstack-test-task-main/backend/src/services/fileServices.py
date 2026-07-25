@@ -1,3 +1,4 @@
+import asyncio
 import mimetypes
 from pathlib import Path
 from typing import Type
@@ -7,8 +8,9 @@ import aiofiles
 from fastapi import HTTPException, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
-from starlette.responses import FileResponse
+from starlette.responses import StreamingResponse
 from src.infrastructure.config import settings
+from src.infrastructure.file_storage.minio import minio_client
 from src.models.stored_file import StoredFile
 from src.services.queries.fileQueries import upload_file_insert, list_file_query, get_file_query, update_file_query, \
     delete_file_query
@@ -68,38 +70,33 @@ async def create_file(
     file_name = upload_file.filename
     suffix = Path(file_name or "").suffix
     stored_name = f"{file_id}{suffix}"
-    stored_path = settings.storage_dir / stored_name
+
     mime = (
         upload_file.content_type
         or mimetypes.guess_type(stored_name)[0]
         or "application/octet-stream"
     )
 
-    max_size = settings.max_file_size
-    size = 0
-    chunks = []
     logger.debug('create_file start uploading file')
 
-    while True:
-        chunk = await upload_file.read(1024 * 1024)  # 1MiB
-        if not chunk:
-            break
-        size += len(chunk)
-        if size > max_size:
-            raise HTTPException(
-                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail="File is too large",
-            )
-        chunks.append(chunk)
+    size = upload_file.size
 
-    content = b"".join(chunks)
-    if not content:
+    if size is not None and size > settings.max_file_size:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="File is empty"
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File is too large"
         )
     logger.debug('create_file file uploaded')
 
-    await _save_uploaded_file(content, stored_path)
+    await asyncio.to_thread(
+        minio_client.put_object,
+        bucket_name=settings.s3_bucket,
+        object_name=stored_name,
+        data=upload_file.file,
+        length=-1,
+        part_size=10 * 1024 * 1024,
+        content_type=mime,
+    )
 
     file_item = await upload_file_insert(
         session, file_id, title, file_name, stored_name, mime, size, settings.rabbit_queue
@@ -136,12 +133,16 @@ async def delete_file(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
         )
-    stored_path = settings.storage_dir / file_item.stored_name
-    if stored_path.exists():
-        try:
-            await aiofiles.os.remove(stored_path)
-        except Exception:
-            pass
+    try:
+        await asyncio.to_thread(
+            minio_client.remove_object,
+            settings.s3_bucket,
+            file_item.stored_name,
+        )
+    except Exception as e:
+        logger.warning(
+            f"MinIO delete failed: {e}"
+        )
 
     await delete_file_query(session, file_item)
     logging.info(f'>delete_file> File ID {file_id} Deleted')
@@ -166,19 +167,33 @@ async def get_file_path(
 async def download_file_service(
         session: AsyncSession,
         file_id: str
-) -> FileResponse:
+) -> StreamingResponse:
     logger.debug('download_file_service start')
     file_item = await get_file_query(session, file_id)
-    stored_path = settings.storage_dir / file_item.stored_name
 
-    if not stored_path.exists():
+    if not file_item:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Stored file not found"
         )
+
+    try:
+        response = await asyncio.to_thread(
+            minio_client.get_object,
+            settings.s3_bucket,
+            file_item.stored_name,
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Stored file not found"
+        )
     logger.debug('download_file_service end')
     logging.info(f'>download_file_service> File ID {file_id} Download Started')
-    return FileResponse(
-        path=stored_path,
+    return StreamingResponse(
+        response,
         media_type=file_item.mime_type,
-        filename=file_item.original_name,
+        headers={
+            "Content-Disposition":
+                f'attachment; filename="{file_item.original_name}"'
+        }
     )

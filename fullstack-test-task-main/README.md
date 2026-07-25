@@ -24,16 +24,21 @@ Frontend([Frontend App])
         FastAPI[FastAPI]
     end
 FastAPI  -->|Insert| Files
-FastAPI  -->|Insert| Alerts
+FastAPI  -->|Streaming| MinIO
 FastAPI  -->|Insert| Outbox
 subgraph Postgres service
         Files[(Files Table)]
         Alerts[(Alerts Table)]
         Outbox[(Outbox Table)]
 end
+
+subgraph MinIO service
+MinIO 
+end
+
     Worker --> |Select| Outbox
          Status_worker -->|Update status| Files
-         Alert_worker-->|Insert status| Alerts
+         Alert_worker-->|Insert| Alerts
      subgraph Outbox processor
 Worker
 Status_worker 
@@ -58,6 +63,8 @@ Check_metadata_Consumer
      end
     Check_metadata_Consumer -->|publish| alerts_queue
 Check_metadata_Consumer -->|publish| status_queue
+Check_metadata_Consumer -->|check_metadata| MinIO
      Scan_Consumer  -.->|fail after retries| DLQ[(Dead Letter Queue)]
 Check_metadata_Consumer-.->|fail after retries| DLQ[(Dead Letter Queue)]
+
 ```

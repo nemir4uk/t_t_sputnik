@@ -1,11 +1,18 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
-
 from src.api.alerts import alerts_router
 from src.api.files import files_router
+from src.infrastructure.file_storage.minio import init_bucket
 
-app = FastAPI(title="File‑store API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_bucket()
+    yield
+
+app = FastAPI(title="File‑store API", version="0.1.0", lifespan=lifespan)
 
 origins = [
     "http://localhost:3000",
