@@ -1,0 +1,106 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    env_file:
+      - .env
+    command: >
+      sh -c "alembic upgrade head && python -m src.main"
+    container_name: backend
+    volumes:
+      - ./backend/storage:/storage
+    ports:
+      - "8000:8000"
+    depends_on:
+      consumer:
+        condition: service_started
+      backend-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  outbox-worker:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    env_file:
+      - .env
+    command: >
+      sh -c "python -m src.outbox_processor.worker & python -m src.outbox_processor.status_worker & python -m src.outbox_processor.alert_worker"
+    container_name: outbox-worker
+    depends_on:
+      backend:
+        condition: service_started
+      consumer:
+        condition: service_started
+      backend-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  backend-db:
+    image: postgres:16
+    container_name: backend-db
+    env_file:
+      - .env
+    ports:
+      - "5433:5433"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres","-p","5433" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - backend-db-volume:/var/lib/postgresql/data
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    hostname: my-rabbit
+    restart: unless-stopped
+    environment:
+      RABBITMQ_NODE_IP_ADDRESS: ${RABBITMQ_HOST}
+      RABBITMQ_NODE_PORT: ${RABBITMQ_PORT}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+
+  consumer:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    volumes:
+      - ./backend/storage:/storage
+    command: >
+      sh -c "python -m src.file_checker.scan_consumer & python -m src.file_checker.check_meta_consumer"
+    depends_on:
+      backend-db:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  frontend:
+    init: true
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    container_name: frontend
+    ports:
+      - "3000:3000"
+
+volumes:
+  rabbitmq_data:
+  backend-db-volume:
+

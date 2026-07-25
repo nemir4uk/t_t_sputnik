@@ -1,0 +1,23 @@
+{
+  "name": "sputnic_t_t",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build"
+  },
+  "private": true,
+  "dependencies": {
+    "bootstrap": "^5.3.8",
+    "dotenv": "^17.4.2",
+    "next": "latest",
+    "react": "^18.2.0",
+    "react-bootstrap": "^2.10.10",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "typescript": "^5.5.3"
+  }
+}
