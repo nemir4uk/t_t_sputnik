@@ -1,2 +1,3 @@
-export type {AlertItem} from './types/alertSchema'
-export {getAlerts} from './services/getAlertService'
+export type {AlertItem} from '@/entities/Alerts/model/types/alertSchema'
+export {getAlerts} from '@/entities/Alerts/model/services/getAlertService'
+export {setAlert, removeAlert} from '@/entities/Alerts/model/slice/alertsSlice'

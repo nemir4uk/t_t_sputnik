@@ -1,4 +1,4 @@
-import FilesPage from "@/pages/MainPage/MainPage";
+import FilesPage from "@/app_pages/MainPage/MainPage";
 
 export default function Home() {
     return <FilesPage />;

@@ -1,15 +1,46 @@
-import { Table, Badge, Button, Spinner } from "react-bootstrap";
+import { Table, Badge, Button, Spinner, Form } from "react-bootstrap";
 import { FileItem, getProcessingVariant } from "@/entities/File";
 import { formatDate } from "@/shared/lib/dateFormatter";
 import { formatSize } from "@/shared/lib/sizeFormatter";
 import {API_BASE_URL} from "@/app/config";
+import {useState} from "react";
+
 
 type Props = {
     files: FileItem[];
     isLoading: boolean;
+    onDelete: (file: FileItem) => void;
+    onRename: (file: FileItem, title: string) => void;
 };
 
-export const FilesTable = ({ files, isLoading }: Props) => {
+export const FilesTable = ({ files, isLoading, onDelete, onRename }: Props) => {
+    const [editingId, setEditingId] = useState<string | null>(null);
+    const [editingTitle, setEditingTitle] = useState("");
+    const [isSaving, setIsSaving] = useState(false);
+
+    const startEditing = (file: FileItem) => {
+        setEditingId(file.id);
+        setEditingTitle(file.title);
+    };
+
+    const cancelEditing = () => {
+        setEditingId(null);
+        setEditingTitle("");
+    };
+
+    const saveEditing = async (file: FileItem) => {
+        if (!editingTitle.trim()) {
+            return;
+        }
+        setIsSaving(true);
+        try {
+            onRename(file, editingTitle.trim());
+            cancelEditing();
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="d-flex justify-content-center py-5">
@@ -44,8 +75,59 @@ export const FilesTable = ({ files, isLoading }: Props) => {
                     files.map((file) => (
                         <tr key={file.id}>
                             <td>
-                                <div className="fw-semibold">{file.title}</div>
-                                <div className="small text-secondary">{file.id}</div>
+                                {editingId === file.id ? (
+                                    <div className="d-flex gap-2">
+                                        <Form.Control
+                                            size="sm"
+                                            value={editingTitle}
+                                            onChange={(e) =>
+                                                setEditingTitle(e.target.value)
+                                            }
+                                            onKeyDown={(e) => {
+                                                if (e.key === "Enter") {
+                                                    void saveEditing(file);
+                                                }
+
+                                                if (e.key === "Escape") {
+                                                    cancelEditing();
+                                                }
+                                            }}
+                                            autoFocus
+                                        />
+                                        <Button
+                                            variant="success"
+                                            size="sm"
+                                            disabled={isSaving}
+                                            onClick={() => void saveEditing(file)}
+                                        >
+                                            ✓
+                                        </Button>
+                                        <Button
+                                            variant="secondary"
+                                            size="sm"
+                                            disabled={isSaving}
+                                            onClick={cancelEditing}
+                                        >
+                                            ✕
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <>
+                                        <div
+                                            className="fw-semibold"
+                                            style={{
+                                                cursor: "pointer"
+                                            }}
+                                            onClick={() => startEditing(file)}
+                                            title="Нажмите для изменения"
+                                        >
+                                            {file.title}
+                                        </div>
+                                        <div className="small text-secondary">
+                                            {file.id}
+                                        </div>
+                                    </>
+                                )}
                             </td>
                             <td>{file.original_name}</td>
                             <td>{file.mime_type}</td>
@@ -67,14 +149,24 @@ export const FilesTable = ({ files, isLoading }: Props) => {
                             </td>
                             <td>{formatDate(file.created_at)}</td>
                             <td className="text-nowrap">
-                                <Button
-                                    as="a"
-                                    href={`${API_BASE_URL}/files/${file.id}/download`}
-                                    variant="outline-primary"
-                                    size="sm"
-                                >
-                                    Скачать
-                                </Button>
+                                <div className="d-flex gap-2">
+                                    <Button
+                                        as="a"
+                                        href={`${API_BASE_URL}/files/${file.id}/download`}
+                                        variant="outline-primary"
+                                        size="sm"
+                                    >
+                                        Скачать
+                                    </Button>
+
+                                    <Button
+                                        variant="outline-danger"
+                                        size="sm"
+                                        onClick={() => onDelete(file)}
+                                    >
+                                        Удалить
+                                    </Button>
+                                </div>
                             </td>
                         </tr>
                     ))

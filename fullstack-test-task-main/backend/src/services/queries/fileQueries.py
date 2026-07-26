@@ -75,7 +75,7 @@ async def get_file_query(session, file_id):
 
 
 async def delete_file_query(session, file_item):
-    await session.delete(session, file_item)
+    await session.delete(file_item)
     await session.commit()
 
 
@@ -86,3 +86,4 @@ async def update_file_query(session, file_id, title):
     file_item.title = title
     await session.commit()
     await session.refresh(file_item)
+    return file_item

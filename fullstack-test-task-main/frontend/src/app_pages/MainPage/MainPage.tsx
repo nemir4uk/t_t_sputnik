@@ -4,6 +4,13 @@ import { Container, Card, Row, Col, Button, Badge, Alert } from "react-bootstrap
 import { FilesTable, UploadModal, useFiles } from "@/features/File";
 import { AlertsTable, useAlerts } from "@/features/Alerts";
 import {useState} from "react";
+import {FileItem} from "@/entities/File";
+import {deleteFile} from "@/entities/File/model/services/deleteFileService";
+import {updateFileTitle} from "@/entities/File/model/services/updateFileTitleService";
+import {useAppDispatch} from "@/app/providers/store-provider/config/hooks";
+import {removeFile, updateFile} from "@/entities/File/model/slice/fileSlice";
+import {removeAlert} from "@/entities/Alerts";
+import {ApiError} from "@/shared/api/responseHandler";
 
 export default function FilesPage() {
     // Файлы
@@ -26,6 +33,7 @@ export default function FilesPage() {
     const [showModal, setShowModal] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState<string | null>(null);
+    const dispatch = useAppDispatch();
 
     const handleSave = async (title: string, file: File) => {
         setIsSubmitting(true);
@@ -42,6 +50,37 @@ export default function FilesPage() {
 
     const handleRefresh = () => {
         void Promise.all([reloadFiles(), reloadAlerts()]);
+    };
+
+    const onDelete = async (file: FileItem) => {
+        if (!confirm(`Удалить файл "${file.title}"?`)) {
+            return;
+        }
+        await deleteFile(file.id);
+        dispatch(removeFile(file.id));
+        dispatch(removeAlert(file.id));
+    };
+
+    const onRename = async (
+        file: FileItem,
+        title: string
+    ) => {
+        try {
+            const updated = await updateFileTitle(
+                file.id,
+                title,
+            );
+            dispatch(updateFile(updated));
+        } catch (error) {
+            if (error instanceof ApiError) {
+                switch (error.status) {
+                    case 404:
+                        alert("Файл не найден");
+                        return;
+                }
+            }
+            alert("Не удалось изменить название");
+        }
     };
 
     return (
@@ -88,7 +127,12 @@ export default function FilesPage() {
                             </div>
                         </Card.Header>
                         <Card.Body className="px-4 pb-4">
-                            <FilesTable files={files} isLoading={filesLoading} />
+                            <FilesTable
+                                files={files}
+                                isLoading={filesLoading}
+                                onDelete={onDelete}
+                                onRename={onRename}
+                            />
                         </Card.Body>
                     </Card>
 

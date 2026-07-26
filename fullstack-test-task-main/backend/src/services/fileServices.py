@@ -2,6 +2,7 @@ import asyncio
 import mimetypes
 from pathlib import Path
 from typing import Type
+from urllib.parse import quote
 from uuid import uuid4
 import logging
 import aiofiles
@@ -189,11 +190,15 @@ async def download_file_service(
         )
     logger.debug('download_file_service end')
     logging.info(f'>download_file_service> File ID {file_id} Download Started')
+
+    filename = quote(
+        file_item.original_name
+    )
     return StreamingResponse(
         response,
         media_type=file_item.mime_type,
         headers={
             "Content-Disposition":
-                f'attachment; filename="{file_item.original_name}"'
+                f"attachment; filename*=UTF-8''{filename}"
         }
     )

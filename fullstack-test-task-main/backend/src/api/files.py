@@ -3,14 +3,14 @@ from typing import List
 from fastapi import Form, UploadFile, File, Depends, APIRouter
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
-from starlette.responses import FileResponse
+from starlette.responses import StreamingResponse
 
 from src.infrastructure.db.sessions import get_async_session
 from src.schemas.filesSchemas import FileItem, FileUpdate
 from src.services.fileServices import list_files, create_file, get_file, update_file, delete_file, download_file_service
 
-
 files_router = APIRouter()
+
 
 @files_router.get("/files", response_model=List[FileItem])
 async def list_files_view(
@@ -60,7 +60,7 @@ async def update_file_view(
 async def download_file(
         file_id: str,
         session: AsyncSession = Depends(get_async_session)
-) -> FileResponse:
+) -> StreamingResponse:
     return await download_file_service(session, file_id)
 
 

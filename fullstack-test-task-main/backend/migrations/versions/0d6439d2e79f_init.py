@@ -44,7 +44,7 @@ def upgrade() -> None:
     sa.Column('level', sa.String(length=50), nullable=False),
     sa.Column('message', sa.String(length=500), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-    sa.ForeignKeyConstraint(['file_id'], ['files.id'], ),
+    sa.ForeignKeyConstraint(['file_id'], ['files.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('outbox_messages',

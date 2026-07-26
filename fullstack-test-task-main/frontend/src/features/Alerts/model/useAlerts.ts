@@ -1,18 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertItem, getAlerts } from "@/entities/Alerts";
+import {getAlerts, setAlert} from "@/entities/Alerts";
+import {useAppDispatch, useAppSelector} from "@/app/providers/store-provider/config/hooks";
 
 
 export const useAlerts = () => {
-    const [alerts, setAlerts] = useState<AlertItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const dispatch = useAppDispatch();
+    const alerts = useAppSelector(
+        state => state.alerts.items
+    );
 
     const load = useCallback(async () => {
         setIsLoading(true);
         setError(null);
         try {
             const data = await getAlerts();
-            setAlerts(data);
+            dispatch(setAlert(data));
         } catch (e) {
             setError(e instanceof Error ? e.message : "Не удалось загрузить алерты");
         } finally {
